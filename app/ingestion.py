@@ -81,9 +81,17 @@ def ingest_documents():
     documents = load_documents()
 
     for document in documents:
-
+        # Remove previously indexed chunks for this source - This removes all previously indexed chunks belonging to that file before re-ingesting it.
+        collection.delete(
+            where={"source": document["filename"]}
+        )
+        
+        # Generate chunks
         chunks = chunk_text(document["content"])
 
+        #Remove exact duplicate chunks while preserving order
+        chunks = list(dict.fromkeys(chunks))
+        
         for index, chunk in enumerate(chunks):
 
             embedding = generate_embedding(chunk)

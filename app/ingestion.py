@@ -2,6 +2,7 @@
 from pathlib import Path
 import chromadb
 import requests
+from app.chunking import chunk_text
 
 from app.config import (
     OLLAMA_BASE_URL,
@@ -46,7 +47,7 @@ def load_documents():
     return documents
 
 
-def chunk_text(text: str, chunk_size=100, overlap=20):
+#def chunk_text(text: str, chunk_size=100, overlap=20):
 
     words = text.split()
 

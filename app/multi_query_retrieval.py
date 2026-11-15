@@ -136,7 +136,8 @@ Search queries:
 def multi_query_retrieve(
     question: str,
     candidate_count: int = 10,
-    top_k: int = 3
+    top_k: int = 3,
+    score_threshold: float | None = None
 ) -> list[dict]:
 
     # Step 1: Generate alternative search queries
@@ -210,10 +211,16 @@ def multi_query_retrieve(
     ranked_results = rerank_documents(
         query=reranking_query,
         documents=candidates,
-        top_k=top_k
-    )
+        top_k=len(candidates)
+)
 
-    return ranked_results
+    if score_threshold is not None:
+        ranked_results = [
+        result for result in ranked_results
+        if result["rerank_score"] >= score_threshold
+    ]
+
+    return ranked_results[:top_k]
 
 
 if __name__ == "__main__":
@@ -223,7 +230,8 @@ if __name__ == "__main__":
     results = multi_query_retrieve(
         question=question,
         candidate_count=10,
-        top_k=3
+        top_k=3,
+        score_threshold=-5
     )
 
     print("\nFinal retrieved documents:")

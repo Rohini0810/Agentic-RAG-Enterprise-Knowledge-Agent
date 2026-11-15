@@ -1,0 +1,35 @@
+
+[
+  {
+    "question": "How many annual leave days do employees receive?",
+    "relevant_sources": [
+      "leave_policy.txt",
+      "employee_benefits.txt"
+    ]
+  },
+  {
+    "question": "What are the security requirements for working remotely?",
+    "relevant_sources": [
+      "remote_work_policy.txt",
+      "security_policy.txt"
+    ]
+  },
+  {
+    "question": "What is the expense claim deadline and approval process?",
+    "relevant_sources": [
+      "expense_policy.txt"
+    ]
+  },
+  {
+    "question": "What employee benefits are available?",
+    "relevant_sources": [
+      "employee_benefits.txt"
+    ]
+  },
+  {
+    "question": "What security practices must employees follow?",
+    "relevant_sources": [
+      "security_policy.txt"
+    ]
+  }
+]

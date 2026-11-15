@@ -1,0 +1,15 @@
+Information Security Policy
+
+Employees must use multi-factor authentication to access company systems.
+
+Company data must not be stored on unauthorized personal devices.
+
+Employees must never share their company passwords.
+
+Sensitive company information must only be shared through approved communication channels.
+
+Employees must report suspected phishing emails to the IT security team.
+
+Company laptops must have approved endpoint protection software installed.
+
+Remote employees must connect through company-approved secure network connections.

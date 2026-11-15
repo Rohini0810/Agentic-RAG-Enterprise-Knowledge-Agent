@@ -1,0 +1,15 @@
+Employee Expense Reimbursement Policy
+
+Employees must submit expense claims within 30 calendar days of the expense.
+
+Original receipts are mandatory for expenses above 1000 INR.
+
+Expenses related to business travel require manager approval.
+
+Managers must review and approve expense claims before reimbursement.
+
+Approved reimbursements are processed during the next payment cycle.
+
+Personal expenses are not eligible for reimbursement.
+
+Employees must provide a valid business justification for every expense claim.

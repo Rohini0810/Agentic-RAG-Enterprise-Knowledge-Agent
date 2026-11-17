@@ -3,6 +3,7 @@ from app.rag_pipeline import ask_question
 
 
 def test_ask_question_generates_answer(monkeypatch):
+    """Test the single-query retrieval path and answer generation."""
 
     retrieved_documents = [
         {
@@ -17,8 +18,18 @@ def test_ask_question_generates_answer(monkeypatch):
         }
     ]
 
+    # Force the router to select single-query retrieval.
     monkeypatch.setattr(
-        "app.rag_pipeline.multi_query_retrieve",
+        "app.rag_pipeline.decide_retrieval_strategy",
+        lambda question: {
+            "strategy": "single_query",
+            "reason": "One information requirement"
+        }
+    )
+
+    # Mock the retrieval function used by single_query.
+    monkeypatch.setattr(
+        "app.rag_pipeline.advanced_retrieve",
         lambda **kwargs: retrieved_documents
     )
 
@@ -37,6 +48,15 @@ def test_ask_question_generates_answer(monkeypatch):
 
 
 def test_ask_question_handles_empty_retrieval(monkeypatch):
+    """Test that the pipeline handles empty multi-query results."""
+
+    monkeypatch.setattr(
+        "app.rag_pipeline.decide_retrieval_strategy",
+        lambda question: {
+            "strategy": "multi_query",
+            "reason": "Multiple information requirements"
+        }
+    )
 
     monkeypatch.setattr(
         "app.rag_pipeline.multi_query_retrieve",
@@ -61,6 +81,7 @@ def test_ask_question_handles_empty_retrieval(monkeypatch):
 
 
 def test_ask_question_uses_configured_threshold(monkeypatch):
+    """Test that multi-query retrieval receives the configured parameters."""
 
     captured_arguments = {}
 
@@ -76,6 +97,14 @@ def test_ask_question_uses_configured_threshold(monkeypatch):
         ]
 
     monkeypatch.setattr(
+        "app.rag_pipeline.decide_retrieval_strategy",
+        lambda question: {
+            "strategy": "multi_query",
+            "reason": "Multiple information requirements"
+        }
+    )
+
+    monkeypatch.setattr(
         "app.rag_pipeline.multi_query_retrieve",
         fake_retrieve
     )
@@ -85,7 +114,7 @@ def test_ask_question_uses_configured_threshold(monkeypatch):
         lambda question, context: "20 days."
     )
 
-    ask_question("How many annual leave days do employees receive?")
+    ask_question("What is the expense claim deadline and approval process?")
 
     assert captured_arguments["score_threshold"] == -5
     assert captured_arguments["candidate_count"] == 10

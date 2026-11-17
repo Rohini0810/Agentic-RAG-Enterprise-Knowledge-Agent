@@ -1,20 +1,3 @@
-#Its responsibility will be to analyze a question and choose:
-#- single_query — for straightforward questions.
-#- multi_query — for questions involving multiple information requirements.
-
-# We'll call this component the Retrieval Router. 
-# Its job is to decide which retrieval strategy is appropriate for each question.
-
-# Example 1: Simple question
-#"How many annual leave days do employees receive?"
-#single_query
-#One search query is sufficient.
-
-#Example 2: Complex question
-#"Can I work remotely, and what security rules apply?"
-#multi_query
-#Two distinct information requirements need to be searched.
-
 
 import json
 from openai import OpenAI
@@ -22,26 +5,32 @@ from openai import OpenAI
 from app.config import OLLAMA_BASE_URL, LLM_MODEL
 
 
-# Connect to Ollama through its OpenAI-compatible API
 client = OpenAI(
     base_url=f"{OLLAMA_BASE_URL}/v1",
     api_key="ollama"
 )
 
 
+VALID_STRATEGIES = {"single_query", "multi_query"}
+
+
 def decide_retrieval_strategy(question: str) -> dict:
+
+    # Step 1: Validate user input
+    if not question or not question.strip():
+        raise ValueError("Question cannot be empty.")
 
     prompt = f"""
 You are an intelligent retrieval routing assistant.
 
-Analyze the user's question and decide which retrieval
-strategy should be used.
+Analyze the user's question and select the appropriate
+retrieval strategy.
 
 Available strategies:
 
 1. single_query:
-Use when the question asks for one clear piece of
-information that can be retrieved using one search query.
+Use when the question asks for one clear information
+requirement that can be searched using one query.
 
 2. multi_query:
 Use when the question contains multiple distinct
@@ -64,31 +53,44 @@ User question:
 {question}
 """
 
-    response = client.chat.completions.create(
-        model=LLM_MODEL,
-        messages=[
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0
-    )
-
-    content = response.choices[0].message.content or ""
-
     try:
+
+        # Step 2: Ask the LLM to classify the question
+        response = client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0
+        )
+
+        content = response.choices[0].message.content or ""
+
+        # Step 3: Parse the JSON response
         decision = json.loads(content)
 
-        if decision.get("strategy") not in [
-            "single_query",
-            "multi_query"
-        ]:
-            raise ValueError("Invalid retrieval strategy")
+        # Step 4: Validate the selected strategy
+        strategy = decision.get("strategy")
 
-        return decision
+        if strategy not in VALID_STRATEGIES:
+            raise ValueError("Unsupported retrieval strategy.")
 
-    except (json.JSONDecodeError, ValueError):
+        reason = decision.get("reason")
+
+        if not isinstance(reason, str) or not reason.strip():
+            reason = "Strategy selected by the retrieval router."
+
+        return {
+            "strategy": strategy,
+            "reason": reason.strip()
+        }
+
+    except (json.JSONDecodeError, ValueError, TypeError, AttributeError):
+
+        # Step 5: Safe fallback for invalid LLM responses
         return {
             "strategy": "multi_query",
-            "reason": "Could not confidently classify the question. Using multi-query retrieval as a fallback."
+            "reason": "Invalid routing response. Falling back to multi-query retrieval."
         }
 
 

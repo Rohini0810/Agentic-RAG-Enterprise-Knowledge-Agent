@@ -74,3 +74,15 @@ def test_router_falls_back_on_unsupported_strategy(monkeypatch):
 
     assert result["strategy"] == "multi_query"
     assert "falling back" in result["reason"].lower()
+    
+import pytest
+
+
+def test_router_rejects_empty_question():
+    with pytest.raises(ValueError, match="Question cannot be empty"):
+        decide_retrieval_strategy("")
+
+
+def test_router_rejects_whitespace_question():
+    with pytest.raises(ValueError, match="Question cannot be empty"):
+        decide_retrieval_strategy("   ")

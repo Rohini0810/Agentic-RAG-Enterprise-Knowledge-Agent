@@ -1,4 +1,6 @@
 
+from time import perf_counter
+
 from app.retrieval_router import decide_retrieval_strategy
 from app.advanced_retrieval import advanced_retrieve
 from app.multi_query_retrieval import multi_query_retrieve
@@ -6,11 +8,63 @@ from app.generation import generate_answer
 from app.intent_router import classify_intent
 from app.scope_guard import is_in_scope
 
+from app.observability import (
+    generate_request_id,
+    log_event,
+    track_duration
+)
+
 
 def ask_question(question: str):
 
+    request_id = generate_request_id()
+    request_start = perf_counter()
+
+    log_event(
+        event="request_started",
+        request_id=request_id,
+        question_length=len(question) if question else 0
+    )
+
+    try:
+        response = process_question(question, request_id)
+
+        log_event(
+            event="request_completed",
+            request_id=request_id,
+            status="success",
+            total_duration_ms=round(
+                (perf_counter() - request_start) * 1000, 2
+            ),
+            source_count=len(response["sources"])
+        )
+
+        return response
+
+    except Exception:
+        log_event(
+            event="request_failed",
+            request_id=request_id,
+            level="exception",
+            total_duration_ms=round(
+                (perf_counter() - request_start) * 1000, 2
+            ),
+            status="failed"
+        )
+        raise
+
+
+def process_question(question: str, request_id: str):
+
     # Step 1: Classify user intent
-    intent = classify_intent(question)
+    with track_duration("intent_classification", request_id):
+        intent = classify_intent(question)
+
+    log_event(
+        event="intent_classified",
+        request_id=request_id,
+        intent=intent
+    )
 
     # Step 2: Handle invalid input
     if intent == "invalid":
@@ -19,7 +73,7 @@ def ask_question(question: str):
             "sources": []
         }
 
-    # Step 3: Handle greetings without retrieval
+    # Step 3: Handle greetings
     if intent == "greeting":
         return {
             "answer": (
@@ -29,8 +83,17 @@ def ask_question(question: str):
             "sources": []
         }
 
-    # Step 4: Reject out-of-scope questions before retrieval
-    if not is_in_scope(question):
+    # Step 4: Validate enterprise scope
+    with track_duration("scope_validation", request_id):
+        in_scope = is_in_scope(question)
+
+    if not in_scope:
+        log_event(
+            event="question_rejected",
+            request_id=request_id,
+            reason="out_of_scope"
+        )
+
         return {
             "answer": (
                 "I'm your Enterprise Knowledge Assistant. "
@@ -40,51 +103,67 @@ def ask_question(question: str):
             "sources": []
         }
 
-    # Step 5: Decide which retrieval strategy to use
-    decision = decide_retrieval_strategy(question)
+    # Step 5: Select retrieval strategy
+    with track_duration("retrieval_routing", request_id):
+        decision = decide_retrieval_strategy(question)
+
     strategy = decision["strategy"]
 
-    print(f"Selected strategy: {strategy}")
-    print(f"Reason: {decision['reason']}")
+    log_event(
+        event="retrieval_strategy_selected",
+        request_id=request_id,
+        strategy=strategy,
+        reason=decision["reason"]
+    )
 
-    # Step 6: Retrieve relevant documents
-    if strategy == "single_query":
-        results = advanced_retrieve(
-            query=question,
-            candidate_count=10,
-            top_k=3,
-            score_threshold=-5
-        )
+    # Step 6: Retrieve documents
+    with track_duration(
+        "retrieval",
+        request_id,
+        strategy=strategy
+    ):
+        if strategy == "single_query":
+            results = advanced_retrieve(
+                query=question,
+                candidate_count=10,
+                top_k=3,
+                score_threshold=-5
+            )
+        else:
+            results = multi_query_retrieve(
+                question=question,
+                candidate_count=10,
+                top_k=3,
+                score_threshold=-5
+            )
 
-    else:
-        results = multi_query_retrieve(
-            question=question,
-            candidate_count=10,
-            top_k=3,
-            score_threshold=-5
-        )
+    log_event(
+        event="retrieval_results",
+        request_id=request_id,
+        document_count=len(results)
+    )
 
-    # Step 7: Handle empty or irrelevant retrieval results
+    # Step 7: Handle empty retrieval
     if not results:
         return {
             "answer": "I couldn't find relevant information.",
             "sources": []
         }
 
-    # Step 8: Prepare retrieved context
+    # Step 8: Prepare context
     documents = [
         result["document"] for result in results
     ]
-
     context = "\n\n".join(documents)
 
-    # Step 9: Generate an answer using the secure prompt
-    answer = generate_answer(
-        question=question,
-        context=context
-    )
+    # Step 9: Generate grounded answer
+    with track_duration("generation", request_id):
+        answer = generate_answer(
+            question=question,
+            context=context
+        )
 
-    # Step 10: Extract unique source filenames
+    # Step 10: Extract unique sources
     sources = list(dict.fromkeys(
         result["metadata"]["source"]
         for result in results

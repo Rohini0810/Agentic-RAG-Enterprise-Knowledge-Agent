@@ -4,6 +4,7 @@ from app.advanced_retrieval import advanced_retrieve
 from app.multi_query_retrieval import multi_query_retrieve
 from app.generation import generate_answer
 from app.intent_router import classify_intent
+from app.scope_guard import is_in_scope
 
 def ask_question(question: str):
 
@@ -50,6 +51,15 @@ def ask_question(question: str):
             "answer": "I couldn't find relevant information.",
             "sources": []
         }
+    if not is_in_scope(question):
+        return {
+        "answer": (
+            "I'm your Enterprise Knowledge Assistant. "
+            "I can help with company policies, leave, "
+            "remote work, expenses, benefits and security."
+        ),
+        "sources": []
+    }
 
     documents = [result["document"] for result in results]
     context = "\n\n".join(documents)

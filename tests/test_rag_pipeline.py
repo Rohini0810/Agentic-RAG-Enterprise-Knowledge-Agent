@@ -71,7 +71,7 @@ def test_ask_question_handles_empty_retrieval(monkeypatch):
         fail_if_called
     )
 
-    response = ask_question("Unknown question")
+    response = ask_question("What is the company policy for an unknown topic?")
 
     assert response["answer"] == (
         "I couldn't find relevant information."

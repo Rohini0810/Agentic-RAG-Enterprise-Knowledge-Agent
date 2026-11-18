@@ -24,3 +24,21 @@ def test_empty_question_returns_validation_message():
 
     assert result["answer"] == "Please enter a valid question."
     assert result["sources"] == []
+
+
+def test_out_of_scope_question_skips_retrieval(monkeypatch):
+    from app import rag_pipeline
+
+    def unexpected_retrieval(*args, **kwargs):
+        raise AssertionError("Retrieval should not run for out-of-scope questions")
+
+    monkeypatch.setattr(
+        rag_pipeline,
+        "decide_retrieval_strategy",
+        unexpected_retrieval
+    )
+
+    result = rag_pipeline.ask_question("What's the weather today?")
+
+    assert result["sources"] == []
+    assert "Enterprise Knowledge Assistant" in result["answer"]

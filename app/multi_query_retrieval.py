@@ -193,6 +193,10 @@ def multi_query_retrieve(
 
         candidates.append(result)
 
+    # Stop if retrieval found no candidates
+    if not candidates:
+        print("\nNo retrieval candidates found.")
+        return []
     # Step 6: Inspect candidates before reranking
     print("\nCandidates before reranking:")
 

@@ -39,12 +39,33 @@ with st.sidebar:
 
     st.divider()
 
+    
     st.subheader("System information")
 
     st.write("**Frontend:** Streamlit")
-    st.write("**Backend:** FastAPI")
+
+    try:
+        health_response = requests.get(
+            "http://127.0.0.1:8000/health",
+        timeout=5
+        )
+
+        if health_response.status_code == 200:
+            health_data = health_response.json()
+
+            if health_data.get("status") == "healthy":
+                st.success("Backend: Online")
+            else:
+                st.error("Backend: Unhealthy")
+        else:
+            st.error("Backend: Unavailable")
+
+    except requests.exceptions.RequestException:
+        st.error("Backend: Offline")
+
     st.write("**LLM:** Qwen 2.5 3B")
     st.write("**Retrieval:** Hybrid + Reranking")
+
 
     st.divider()
 

@@ -3,29 +3,41 @@ from app.retrieval_router import decide_retrieval_strategy
 from app.advanced_retrieval import advanced_retrieve
 from app.multi_query_retrieval import multi_query_retrieve
 from app.generation import generate_answer
-
+from app.intent_router import classify_intent
 
 def ask_question(question: str):
 
-    # Step 1: Decide which retrieval strategy to use
-    decision = decide_retrieval_strategy(question)
+    # Step 1: Classify user intent
+    intent = classify_intent(question)
 
+    # Step 2: Handle invalid input
+    if intent == "invalid":
+        return {
+            "answer": "Please enter a valid question.",
+            "sources": []
+        }
+
+    # Step 3: Handle greetings without retrieval
+    if intent == "greeting":
+        return {
+            "answer": "Hello! I'm your Enterprise Knowledge Assistant. How can I help you with company policies and information?",
+            "sources": []
+        }
+
+    # Step 4: Continue with your existing Agentic RAG logic
+    decision = decide_retrieval_strategy(question)
     strategy = decision["strategy"]
 
-    print("\nRetrieval strategy:", strategy)
-    print("Reason:", decision["reason"])
+    print(f"Selected strategy: {strategy}")
+    print(f"Reason: {decision['reason']}")
 
-    # Step 2: Execute the selected retrieval strategy
     if strategy == "single_query":
-
         results = advanced_retrieve(
             query=question,
             candidate_count=10,
             top_k=3
         )
-
     else:
-
         results = multi_query_retrieve(
             question=question,
             candidate_count=10,
@@ -33,28 +45,19 @@ def ask_question(question: str):
             score_threshold=-5
         )
 
-    # Step 3: Handle empty retrieval results
     if not results:
         return {
             "answer": "I couldn't find relevant information.",
             "sources": []
         }
 
-    # Step 4: Extract document text
-    documents = [
-        result["document"] for result in results
-    ]
-
-    # Step 5: Build context for the LLM
+    documents = [result["document"] for result in results]
     context = "\n\n".join(documents)
 
-    # Step 6: Generate a grounded answer
     answer = generate_answer(question, context)
 
-    # Step 7: Extract unique source filenames
     sources = list(dict.fromkeys(
-        result["metadata"]["source"]
-        for result in results
+        result["metadata"]["source"] for result in results
     ))
 
     return {

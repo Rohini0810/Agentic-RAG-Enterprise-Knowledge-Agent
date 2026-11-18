@@ -2,56 +2,105 @@
 import streamlit as st
 import requests
 
+# --------------------------------
+# Page configuration
+# --------------------------------
+
 st.set_page_config(
-    page_title="Agentic RAG Assistant",
+    page_title="Agentic RAG | Knowledge Assistant",
     page_icon="🤖",
     layout="wide"
 )
 
 API_URL = "http://127.0.0.1:8000/ask"
 
-st.title("🤖 Agentic RAG")
-st.caption("Enterprise Knowledge Assistant")
+# --------------------------------
+# Session state
+# --------------------------------
 
-# Initialize conversation history
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Clear conversation button
-if st.button("Clear conversation"):
-    st.session_state.messages = []
-    st.rerun()
+# --------------------------------
+# Sidebar
+# --------------------------------
 
-# Display previous messages
+with st.sidebar:
+    st.title("🤖 Agentic RAG")
+    st.caption("Enterprise Knowledge Assistant")
+
+    st.divider()
+
+    st.subheader("Workspace")
+
+    if st.button("➕ New conversation", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
+
+    st.divider()
+
+    st.subheader("System information")
+
+    st.write("**Frontend:** Streamlit")
+    st.write("**Backend:** FastAPI")
+    st.write("**LLM:** Qwen 2.5 3B")
+    st.write("**Retrieval:** Hybrid + Reranking")
+
+    st.divider()
+
+    st.caption("Project 4 — AI Engineering Roadmap")
+
+# --------------------------------
+# Main page
+# --------------------------------
+
+st.title("Enterprise Knowledge Assistant")
+
+st.write(
+    "Ask questions about your enterprise knowledge base. "
+    "Get AI-generated answers supported by source documents."
+)
+
+st.divider()
+
+# --------------------------------
+# Display conversation history
+# --------------------------------
+
 for message in st.session_state.messages:
 
     with st.chat_message(message["role"]):
 
-        st.write(message["content"])
+        st.markdown(message["content"])
 
         if message["role"] == "assistant" and message.get("sources"):
-            with st.expander("Source Documents"):
+            with st.expander("📚 View source documents"):
                 for source in message["sources"]:
                     st.write(f"📄 {source}")
 
-# Chat input
-question = st.chat_input("Ask your enterprise knowledge base...")
+# --------------------------------
+# User input
+# --------------------------------
+
+question = st.chat_input(
+    "Ask your enterprise knowledge base..."
+)
 
 if question:
 
-    # Display and store user question
     st.session_state.messages.append({
         "role": "user",
         "content": question
     })
 
     with st.chat_message("user"):
-        st.write(question)
+        st.markdown(question)
 
-    # Call FastAPI
     with st.chat_message("assistant"):
 
-        with st.spinner("Searching documents and generating answer..."):
+        with st.spinner(
+            "Searching enterprise documents and generating an answer..."
+        ):
 
             try:
                 response = requests.post(
@@ -61,26 +110,40 @@ if question:
                 )
 
                 response.raise_for_status()
+
                 result = response.json()
 
                 answer = result["answer"]
                 sources = result["sources"]
 
-                st.write(answer)
+                st.markdown(answer)
 
-                with st.expander("Source Documents"):
-                    for source in sources:
-                        st.write(f"📄 {source}")
+                if sources:
+                    with st.expander("📚 View source documents"):
+                        for source in sources:
+                            st.write(f"📄 {source}")
 
-                # Store assistant response
                 st.session_state.messages.append({
                     "role": "assistant",
                     "content": answer,
                     "sources": sources
                 })
 
-            except requests.exceptions.RequestException as error:
-                st.error(f"Could not reach the AI backend: {error}")
+            except requests.exceptions.ConnectionError:
+                st.error(
+                    "Unable to connect to the backend. "
+                    "Please check whether FastAPI is running."
+                )
+
+            except requests.exceptions.Timeout:
+                st.error(
+                    "The request timed out. Please try again."
+                )
+
+            except requests.exceptions.HTTPError as error:
+                st.error(f"Backend API error: {error}")
 
             except (KeyError, ValueError):
-                st.error("The API returned an unexpected response.")
+                st.error(
+                    "The backend returned an unexpected response."
+                )

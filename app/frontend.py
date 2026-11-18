@@ -2,7 +2,6 @@
 import streamlit as st
 import requests
 
-# Page configuration
 st.set_page_config(
     page_title="Agentic RAG Assistant",
     page_icon="🤖",
@@ -12,26 +11,49 @@ st.set_page_config(
 API_URL = "http://127.0.0.1:8000/ask"
 
 st.title("🤖 Agentic RAG")
-st.subheader("Enterprise Knowledge Assistant")
+st.caption("Enterprise Knowledge Assistant")
 
-st.write(
-    "Ask questions about your enterprise documents "
-    "and get AI-generated answers with source references."
-)
+# Initialize conversation history
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-question = st.text_input(
-    "Ask your question",
-    placeholder="How many annual leave days do employees receive?"
-)
+# Clear conversation button
+if st.button("Clear conversation"):
+    st.session_state.messages = []
+    st.rerun()
 
-if st.button("Ask AI"):
-    if not question.strip():
-        st.warning("Please enter a question.")
+# Display previous messages
+for message in st.session_state.messages:
 
-    else:
-        try:
-            with st.spinner("Searching documents and generating your answer..."):
+    with st.chat_message(message["role"]):
 
+        st.write(message["content"])
+
+        if message["role"] == "assistant" and message.get("sources"):
+            with st.expander("Source Documents"):
+                for source in message["sources"]:
+                    st.write(f"📄 {source}")
+
+# Chat input
+question = st.chat_input("Ask your enterprise knowledge base...")
+
+if question:
+
+    # Display and store user question
+    st.session_state.messages.append({
+        "role": "user",
+        "content": question
+    })
+
+    with st.chat_message("user"):
+        st.write(question)
+
+    # Call FastAPI
+    with st.chat_message("assistant"):
+
+        with st.spinner("Searching documents and generating answer..."):
+
+            try:
                 response = requests.post(
                     API_URL,
                     json={"question": question},
@@ -41,22 +63,24 @@ if st.button("Ask AI"):
                 response.raise_for_status()
                 result = response.json()
 
-            st.subheader("Answer")
-            st.write(result["answer"])
+                answer = result["answer"]
+                sources = result["sources"]
 
-            st.subheader("Source Documents")
+                st.write(answer)
 
-            for source in result["sources"]:
-                st.write(f"📄 {source}")
+                with st.expander("Source Documents"):
+                    for source in sources:
+                        st.write(f"📄 {source}")
 
-        except requests.exceptions.ConnectionError:
-            st.error("Cannot connect to the FastAPI backend. Is it running?")
+                # Store assistant response
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": answer,
+                    "sources": sources
+                })
 
-        except requests.exceptions.Timeout:
-            st.error("The request timed out. Please try again.")
+            except requests.exceptions.RequestException as error:
+                st.error(f"Could not reach the AI backend: {error}")
 
-        except requests.exceptions.HTTPError as error:
-            st.error(f"API returned an error: {error}")
-
-        except (KeyError, ValueError):
-            st.error("The API returned an unexpected response.")
+            except (KeyError, ValueError):
+                st.error("The API returned an unexpected response.")

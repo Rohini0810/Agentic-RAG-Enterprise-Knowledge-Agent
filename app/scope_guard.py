@@ -3,7 +3,11 @@ import re
 
 # Topics supported by the current enterprise document collection.
 ENTERPRISE_KEYWORDS = {
-    "leave", "holiday", "vacation", "absence",
+    "leave",
+    "leaves",
+    "holiday",
+    "vacation",
+    "absence", "leave", "holiday", "vacation", "absence",
     "remote", "work from home", "wfh",
     "security", "password", "device", "network",
     "expense", "reimbursement", "claim", "approval",

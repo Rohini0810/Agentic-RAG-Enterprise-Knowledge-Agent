@@ -19,6 +19,10 @@ API_URL = os.getenv(
     "http://127.0.0.1:8000/ask"
 )
 
+HEALTH_URL = os.getenv(
+    "HEALTH_URL",
+    "http://127.0.0.1:8000/health"
+)
 # --------------------------------
 # Session state
 # --------------------------------
@@ -51,8 +55,8 @@ with st.sidebar:
 
     try:
         health_response = requests.get(
-            "http://127.0.0.1:8000/health",
-        timeout=5
+            HEALTH_URL,
+            timeout=5
         )
 
         if health_response.status_code == 200:

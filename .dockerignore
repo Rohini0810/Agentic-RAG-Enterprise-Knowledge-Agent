@@ -1,0 +1,39 @@
+
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Git
+.git/
+.gitignore
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Local databases and generated data
+data/chroma_db/
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# Tests and development configuration
+tests/
+.agents/
+.claude/
+
+# OS files
+.DS_Store
+
+# Documentation and local editor files
+.vscode/
+.idea/

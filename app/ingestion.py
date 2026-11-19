@@ -1,27 +1,30 @@
 
 from pathlib import Path
+import hashlib
+
 import chromadb
 import requests
-from app.chunking import chunk_text
 
+from app.chunking import chunk_text
 from app.config import (
     OLLAMA_BASE_URL,
     EMBEDDING_MODEL,
     DOCUMENTS_PATH,
     CHROMA_PATH,
-    COLLECTION_NAME
+    COLLECTION_NAME,
 )
 
 
-def generate_embedding(text: str):
+def generate_embedding(text: str) -> list[float]:
+    """Generate an embedding using the configured Ollama model."""
 
     response = requests.post(
         f"{OLLAMA_BASE_URL}/api/embed",
         json={
             "model": EMBEDDING_MODEL,
-            "input": text
+            "input": text,
         },
-        timeout=60
+        timeout=60,
     )
 
     response.raise_for_status()
@@ -29,46 +32,62 @@ def generate_embedding(text: str):
     return response.json()["embeddings"][0]
 
 
-def load_documents():
+def load_documents() -> list[dict]:
+    """Load all TXT documents from the configured directory."""
 
     documents = []
-
     folder = Path(DOCUMENTS_PATH)
 
-    for file_path in folder.glob("*.txt"):
+    if not folder.exists():
+        raise FileNotFoundError(
+            f"Documents directory does not exist: {folder}"
+        )
 
+    for file_path in sorted(folder.glob("*.txt")):
         content = file_path.read_text(encoding="utf-8")
 
         documents.append({
             "filename": file_path.name,
-            "content": content
+            "content": content,
         })
 
     return documents
 
 
-#def chunk_text(text: str, chunk_size=100, overlap=20):
+def calculate_content_hash(content: str) -> str:
+    """Calculate a SHA-256 hash to detect document changes."""
 
-    words = text.split()
-
-    chunks = []
-
-    start = 0
-
-    while start < len(words):
-
-        end = start + chunk_size
-
-        chunk = " ".join(words[start:end])
-
-        chunks.append(chunk)
-
-        start += chunk_size - overlap
-
-    return chunks
+    return hashlib.sha256(
+        content.encode("utf-8")
+    ).hexdigest()
 
 
-def ingest_documents():
+def get_existing_sources(collection) -> dict:
+    """Return existing source names and their stored content hashes."""
+
+    result = collection.get(include=["metadatas"])
+
+    sources = {}
+
+    for metadata in result["metadatas"] or []:
+        source = metadata.get("source")
+
+        if source:
+            sources[source] = metadata.get("content_hash")
+
+    return sources
+
+
+def ingest_documents() -> dict:
+    """
+    Synchronize local TXT documents with ChromaDB.
+
+    - New documents are indexed.
+    - Modified documents are re-indexed.
+    - Unchanged documents are skipped.
+    - Deleted documents are removed.
+    - Existing chunks are retained if embedding generation fails.
+    """
 
     client = chromadb.PersistentClient(
         path=CHROMA_PATH
@@ -80,37 +99,111 @@ def ingest_documents():
 
     documents = load_documents()
 
+    existing_sources = get_existing_sources(collection)
+
+    current_sources = {
+        document["filename"]
+        for document in documents
+    }
+
+    added = 0
+    modified = 0
+    unchanged = 0
+    deleted = 0
+
+    # Process new and modified documents.
     for document in documents:
-        # Remove previously indexed chunks for this source - This removes all previously indexed chunks belonging to that file before re-ingesting it.
-        collection.delete(
-            where={"source": document["filename"]}
-        )
-        
-        # Generate chunks
-        chunks = chunk_text(document["content"])
 
-        #Remove exact duplicate chunks while preserving order
+        filename = document["filename"]
+        content = document["content"]
+
+        content_hash = calculate_content_hash(content)
+
+        # Skip documents whose content has not changed.
+        if (
+            filename in existing_sources
+            and existing_sources[filename] == content_hash
+        ):
+            unchanged += 1
+            print(f"Unchanged: {filename}")
+            continue
+
+        chunks = chunk_text(content)
+
+        # Remove exact duplicate chunks while preserving order.
         chunks = list(dict.fromkeys(chunks))
-        
-        for index, chunk in enumerate(chunks):
 
-            embedding = generate_embedding(chunk)
+        # Generate every embedding BEFORE deleting old chunks.
+        # If embedding generation fails, the old index remains intact.
+        embeddings = [
+            generate_embedding(chunk)
+            for chunk in chunks
+        ]
 
+        ids = [
+            f"{filename}_{index}"
+            for index in range(len(chunks))
+        ]
+
+        metadatas = [
+            {
+                "source": filename,
+                "chunk_index": index,
+                "content_hash": content_hash,
+            }
+            for index in range(len(chunks))
+        ]
+
+        # Replace the old document only after all embeddings succeed.
+        collection.delete(
+            where={"source": filename}
+        )
+
+        if chunks:
             collection.upsert(
-                ids=[f"{document['filename']}_{index}"],
-                documents=[chunk],
-                embeddings=[embedding],
-                metadatas=[{
-                    "source": document["filename"],
-                    "chunk_index": index
-                }]
+                ids=ids,
+                documents=chunks,
+                embeddings=embeddings,
+                metadatas=metadatas,
             )
 
-    print(f"Successfully ingested {len(documents)} documents.")
+        if filename in existing_sources:
+            modified += 1
+            print(f"Updated: {filename}")
+        else:
+            added += 1
+            print(f"Added: {filename}")
 
-    print(f"Total chunks stored: {collection.count()}")
+    # Remove documents that no longer exist locally.
+    deleted_sources = (
+        set(existing_sources.keys()) - current_sources
+    )
+
+    for filename in deleted_sources:
+        collection.delete(
+            where={"source": filename}
+        )
+
+        deleted += 1
+        print(f"Deleted: {filename}")
+
+    summary = {
+        "added": added,
+        "modified": modified,
+        "unchanged": unchanged,
+        "deleted": deleted,
+        "total_chunks": collection.count(),
+    }
+
+    print("\nDocument synchronization completed.")
+    print(f"Added: {added}")
+    print(f"Modified: {modified}")
+    print(f"Unchanged: {unchanged}")
+    print(f"Deleted: {deleted}")
+    print(f"Total chunks: {collection.count()}")
+
+    return summary
 
 
 if __name__ == "__main__":
-
     ingest_documents()

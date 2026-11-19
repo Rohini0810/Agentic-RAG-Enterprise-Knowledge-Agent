@@ -15,9 +15,9 @@ from app.observability import (
 )
 
 
-def ask_question(question: str):
+def ask_question(question: str, request_id: str | None = None):
 
-    request_id = generate_request_id()
+    request_id = request_id or generate_request_id()
     request_start = perf_counter()
 
     log_event(

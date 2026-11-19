@@ -9,7 +9,6 @@
 from textwrap import wrap
 #track_duration() is a context manager, so we can wrap any operation:
 
-
 import logging
 import time
 import uuid
@@ -19,21 +18,13 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 
-# --------------------------------------------------
-# Configuration
-# --------------------------------------------------
-
+# Logging configuration
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOG_DIRECTORY = PROJECT_ROOT / "logs"
 LOG_FILE = LOG_DIRECTORY / "agentic_rag.log"
 
-MAX_LOG_SIZE = 1 * 1024 * 1024  # 1 MB
+MAX_LOG_SIZE = 1 * 1024 * 1024
 BACKUP_COUNT = 5
-
-
-# --------------------------------------------------
-# Logger configuration
-# --------------------------------------------------
 
 LOG_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
@@ -47,11 +38,9 @@ if not logger.handlers:
         "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
     )
 
-    # Console handler
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
 
-    # Rotating file handler
     file_handler = RotatingFileHandler(
         LOG_FILE,
         maxBytes=MAX_LOG_SIZE,
@@ -64,18 +53,10 @@ if not logger.handlers:
     logger.addHandler(file_handler)
 
 
-# --------------------------------------------------
-# Request tracking
-# --------------------------------------------------
-
 def generate_request_id() -> str:
-    """Generate a unique identifier for each request."""
+    """Generate a unique ID for each request."""
     return str(uuid.uuid4())
 
-
-# --------------------------------------------------
-# Structured event logging
-# --------------------------------------------------
 
 def log_event(
     event: str,
@@ -83,7 +64,7 @@ def log_event(
     level: str = "info",
     **metadata
 ):
-    """Log an event with request ID and additional metadata."""
+    """Log an event with request context."""
 
     log_data = {
         "event": event,
@@ -95,18 +76,9 @@ def log_event(
         f"{key}={value}" for key, value in log_data.items()
     )
 
-    log_method = getattr(
-        logger,
-        level.lower(),
-        logger.info
-    )
-
+    log_method = getattr(logger, level.lower(), logger.info)
     log_method(message)
 
-
-# --------------------------------------------------
-# Execution time tracking
-# --------------------------------------------------
 
 @contextmanager
 def track_duration(
@@ -123,8 +95,7 @@ def track_duration(
 
     except Exception:
         duration_ms = round(
-            (time.perf_counter() - start_time) * 1000,
-            2
+            (time.perf_counter() - start_time) * 1000, 2
         )
 
         log_event(
@@ -135,13 +106,11 @@ def track_duration(
             status="failed",
             **metadata
         )
-
         raise
 
     else:
         duration_ms = round(
-            (time.perf_counter() - start_time) * 1000,
-            2
+            (time.perf_counter() - start_time) * 1000, 2
         )
 
         log_event(
@@ -151,40 +120,3 @@ def track_duration(
             status="success",
             **metadata
         )
-
-
-# --------------------------------------------------
-# Standalone test
-# --------------------------------------------------
-
-if __name__ == "__main__":
-
-    request_id = generate_request_id()
-
-    log_event(
-        event="request_started",
-        request_id=request_id,
-        question_length=48
-    )
-
-    with track_duration(
-        event="retrieval",
-        request_id=request_id,
-        strategy="single_query"
-    ):
-        time.sleep(0.5)
-
-    with track_duration(
-        event="generation",
-        request_id=request_id,
-        model="qwen2.5:3b"
-    ):
-        time.sleep(1)
-
-    log_event(
-        event="request_completed",
-        request_id=request_id,
-        status="success"
-    )
-
-    print(f"\nLog file location: {LOG_FILE}")

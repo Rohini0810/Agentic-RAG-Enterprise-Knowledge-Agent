@@ -146,7 +146,7 @@ stateDiagram-v2
 
 FastAPI lifespan starts the observer and performs initial sync before serving. At shutdown it stops and joins the observer, cancels pending timer work, and waits for active ingestion. The handler debounces TXT events and serializes watcher-triggered ingestion.
 
-Local testing verified create, modify, delete, and graceful shutdown. Multiple events around one save caused more than one ingestion run in testing; event coalescing remains an improvement.
+Local testing verified create, modify, delete, and graceful shutdown. Docker integration was also verified: the API container was healthy, a TXT file created through the host bind mount was detected and indexed (six documents, 13 chunks), and deleting that file removed its indexed chunks (five documents, 12 chunks). Multiple events around one save caused more than one ingestion run in testing; event coalescing remains an improvement.
 
 The watcher is process-local. The current Compose command uses one Uvicorn worker. Multiple workers would each create an observer; a multi-worker deployment should move watching to a dedicated service or add coordination.
 
@@ -174,7 +174,7 @@ flowchart TB
   API -->|host.docker.internal:11434| O
 ```
 
-The documents path is a bind mount. ChromaDB and logs use named volumes. A bind mount synchronizes files; it does not itself create embeddings. Watchdog detects the event, ingestion calls Ollama, and ChromaDB receives the vectors.
+The documents path is a bind mount. ChromaDB and logs use named volumes. A bind mount synchronizes files; it does not itself create embeddings. Watchdog detects the event, ingestion calls Ollama, and ChromaDB receives the vectors. The API image build was verified with CPU-only PyTorch (`2.15.0+cpu`); CUDA was unavailable as expected for this CPU-based container configuration. The CrossEncoder import also succeeded inside the API container.
 
 ## Health and readiness
 

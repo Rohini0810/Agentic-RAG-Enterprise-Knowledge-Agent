@@ -22,6 +22,10 @@ The repository Dockerfile starts from `python:3.12-slim`, sets Python runtime fl
 
 Copying requirements before source code allows Docker to reuse the dependency layer when only application code changes.
 
+### CPU-only PyTorch build
+
+The Dockerfile installs `torch==2.15.0` from the PyTorch CPU wheel index before installing the remaining requirements. This avoids downloading unnecessary NVIDIA CUDA packages for the CPU-based API container. `orjson` is installed in a separate layer before the remaining requirements. The completed image was verified to report `2.15.0+cpu` with CUDA unavailable, and `sentence_transformers.CrossEncoder` imported successfully.
+
 ## 3. Compose services
 
 | Service | Purpose | Host port |
@@ -185,6 +189,10 @@ The `-v` option removes named volumes, including ChromaDB and logs. Do not use i
 8. Modify and verify updated chunks.
 9. Delete and verify source chunks disappear.
 10. Recreate the API container and verify ChromaDB volume persistence.
+
+### Verified Docker integration result
+
+The API container reached healthy status. A host-created TXT test file became visible through the bind mount and was indexed by the container's ingestion watcher. The collection reported six documents and 13 chunks. After the host file was deleted, the watcher removed its chunks; the collection returned to five documents and 12 chunks. This verifies Docker-side create and delete synchronization. A separate modify-event test inside Docker and named-volume persistence across API recreation were not recorded as part of this verification.
 
 Record actual test output in the development log. A successful image build alone does not prove watcher functionality.
 

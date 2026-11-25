@@ -214,13 +214,19 @@ Multiple ingestion runs occurred around one apparent creation event. Final data 
 - FastAPI startup, initial sync, and graceful shutdown.
 - Local health endpoint on port 8001.
 
-### Docker-side verification still required
+### Docker-side verification completed / remaining
 
-- Watchdog installed in the API image.
-- Watcher starts in the API container.
-- Host bind-mount events reach the container observer.
-- Docker ChromaDB updates on add/modify/delete.
-- ChromaDB named volume persists after API recreation.
-- Container shutdown stops the observer cleanly.
+Verified:
+- Docker image build completed successfully after switching the API image to CPU-only PyTorch.
+- PyTorch inside the API container reported `2.15.0+cpu`; CUDA was unavailable as expected.
+- `sentence_transformers.CrossEncoder` imported successfully inside the API container.
+- API container reached healthy status.
+- Host bind-mount create event reached the API container watcher and indexed the test document; collection count moved to six documents and 13 chunks.
+- Host delete event reached the watcher and removed the test document; collection returned to five documents and 12 chunks.
 
-Update this section with actual command output and test dates when the Docker tests pass.
+Not separately verified in this milestone:
+- Docker-side modify event.
+- ChromaDB named-volume persistence across API container recreation.
+- A formal Docker-side graceful-shutdown assertion beyond observing normal container lifecycle logs.
+
+The latest reported local automated test run completed with 61 tests passed.

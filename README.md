@@ -33,41 +33,44 @@ The goal is not simply to build a chatbot. It is to understand and implement the
 13. Tracks request IDs, stage durations, outcomes, and errors.
 14. Watches the document directory and synchronizes changes into ChromaDB.
 
-The document watcher has been verified locally for create, modify, and delete events, including graceful FastAPI shutdown. Docker-side watcher integration must be considered complete only after its own verification steps pass.
+The document watcher has been verified locally for create, modify, and delete events, including graceful FastAPI shutdown. Docker integration was also verified: a host-created TXT file appeared in the API container and was indexed in ChromaDB; deleting it from the host removed its indexed chunks.
 
-## 2. Architecture at a glance
+## 2. Final architecture
+
+The diagram below shows the complete application architecture, including the Docker Compose boundary, ingestion path, retrieval branches, persistent vector storage, observability, and the separately hosted Ollama runtime.
 
 ```mermaid
 flowchart TB
-    U[User] --> UI[Streamlit Frontend]
-    UI -->|POST /ask| API[FastAPI]
-    API --> PIPE[RAG Pipeline]
-    PIPE --> INTENT[Intent Classification]
-    INTENT --> SCOPE[Enterprise Scope Guard]
-    SCOPE --> ROUTER[Retrieval Strategy Router]
-    ROUTER -->|single_query| ADV[Hybrid Retrieval + Reranking]
-    ROUTER -->|multi_query| MQ[Multi-query Retrieval]
-    ADV --> GEN[Grounded Answer Generation]
-    MQ --> GEN
-    GEN --> API
-    API --> UI
-    UI --> U
-
-    DOCS[TXT Documents] --> WATCH[Watchdog]
-    WATCH --> ING[Ingestion Service]
-    ING --> CHUNK[Recursive Character Chunking]
-    CHUNK --> EMB[Ollama Embeddings]
-    EMB --> DB[(ChromaDB)]
-    DB --> ADV
-    DB --> MQ
-
-    OBS[Observability] -. request IDs, timings, logs .-> API
-    OBS -. stage traces .-> PIPE
+    USER[User] --> FE[Streamlit Frontend]
+    subgraph COMPOSE["Docker Compose"]
+        FE -->|HTTP POST /ask| API[FastAPI Backend]
+        API --> INTENT[Intent Classification]
+        INTENT --> SCOPE[Enterprise Scope Guard]
+        SCOPE --> ROUTER[Retrieval Strategy Router]
+        ROUTER -->|single query| HYBRID[Hybrid Retrieval]
+        ROUTER -->|multi query| MULTI[Multi-Query Retrieval]
+        HYBRID --> DENSE[Dense Vector Search]
+        HYBRID --> BM25[BM25 Keyword Search]
+        DENSE --> RRF[Reciprocal Rank Fusion]
+        BM25 --> RRF
+        RRF --> RERANK[Cross-Encoder Reranking]
+        MULTI --> RERANK
+        RERANK --> GEN[Grounded Answer Generation]
+        GEN --> API
+        API --> LOG[Request Tracing and Logs]
+        WATCH[Watchdog Document Watcher] --> ING[Document Ingestion]
+        ING --> CHUNK[Recursive Chunking]
+        CHUNK --> EMB[Embedding Generation]
+        EMB --> DB[(Persistent ChromaDB Volume)]
+        DB --> DENSE
+    end
+    API -->|host.docker.internal:11434| OLLAMA[Ollama on Mac]
+    OLLAMA --> QWEN[Qwen 2.5 3B]
+    OLLAMA --> NOMIC[Nomic Embed Text]
+    USER <-->|Answers and sources| FE
 ```
 
-The ingestion path prepares the searchable knowledge base. The query path finds relevant chunks for a question.
-
-See [Architecture](docs/architecture.md) for system boundaries, component diagrams, and runtime sequences.
+For detailed component relationships, request and ingestion sequences, lifecycle management, and deployment boundaries, see [System Architecture](docs/architecture.md).
 
 ## 3. Technology stack
 
@@ -423,7 +426,7 @@ docker compose exec api python -m app.ingestion
 docker compose down
 ```
 
-The document directory is bind-mounted so local file changes are visible inside the API container. ChromaDB and logs are stored in named volumes. A bind mount synchronizes files; the watcher and ingestion pipeline update the vector index.
+The document directory is bind-mounted so local file changes are visible inside the API container. ChromaDB and logs are stored in named volumes. A bind mount synchronizes files; the watcher and ingestion pipeline update the vector index. The API image was built successfully with CPU-only PyTorch (`2.15.0+cpu`) to avoid unnecessary NVIDIA CUDA dependencies in this CPU-based container environment. Docker watcher create/delete integration was verified against the ChromaDB collection.
 
 ## 13. Tests
 
@@ -433,7 +436,7 @@ Run from the project root:
 pytest -v
 ```
 
-Tests cover advanced retrieval, API behavior, evaluation metrics, generation, ingestion failure preservation, intent classification, multi-query retrieval, observability, RAG integration, relevance filtering, retrieval routing, and scope validation.
+Tests cover advanced retrieval, API behavior, evaluation metrics, generation, ingestion failure preservation, intent classification, multi-query retrieval, observability, RAG integration, relevance filtering, retrieval routing, and scope validation. The latest reported local test run completed with **61 tests passed**.
 
 Tests that require live Ollama, a populated ChromaDB collection, or model downloads need those dependencies prepared. Inspect test fixtures and mocks before assuming every test is fully isolated.
 
